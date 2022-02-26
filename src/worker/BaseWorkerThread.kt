@@ -7,42 +7,34 @@ package worker
  * [BaseWorkerThread] support error handling and multiple client access
  * based on provided configuration.
  *
- * @param body Body that will be executed.
- * @param enableSynchronized Enable multiple access or not.
- * @param catchException Handle [Exception] by default or not.
- * @param errorCallback Callback to get notified about [Exception] if [catchException] is enabled.
- * @param threadName Thread name for logging purpose.
+ * @param builder [WorkerBuilder] to provide work configuration to the [BaseWorkerThread].
  */
 abstract class BaseWorkerThread(
-    private val body: BaseWorkerThread.() -> Unit,
-    private val enableSynchronized: Boolean = true,
-    private val catchException: Boolean = true,
-    private var errorCallback: (Exception) -> Unit = {},
-    private val threadName: String? = null
+    private val builder: WorkerBuilder
 ) :
     Thread() {
     /*Store the thread name or use current class name*/
-    private val tag = threadName ?: (this::class.java.canonicalName ?: "BaseWorkerThread")
+    private val tag = builder.threadName ?: (this::class.java.canonicalName ?: "BaseWorkerThread")
 
     override fun run() {
         startWork()
     }
 
     /**
-     * Stat the execution of the given [body]. Check if [catchException] is applicable,
+     * Stat the execution of the given #builder.getBody. Check if #builder.catchException is applicable,
      * if applicable [executeBody] under [executeBodyOrReturnNull] API else [executeBody].
      */
     private fun startWork() {
-        if (catchException) executeBodyOrReturnNull { executeBody() } else executeBody()
+        if (builder.catchException) executeBodyOrReturnNull { executeBody() } else executeBody()
     }
 
     /**
-     * Execute the given body based on Configuration [enableSynchronized].
-     * If [enableSynchronized] is applicable, disable multiple access from multiple clients.
+     * Execute the given body based on Configuration #builder.enableSynchronizedAccess.
+     * If #builder.enableSynchronizedAccess is applicable, disable multiple access from multiple clients.
      * Execute the given body one by one else allow multiple access.
      */
     private fun executeBody() {
-        if (enableSynchronized) synchronized(tag) { invokeBody(body) } else invokeBody(body)
+        if (builder.enableSynchronizedAccess) synchronized(tag) { invokeBody(builder.getBody) } else invokeBody(builder.getBody)
     }
 
     /**
@@ -71,7 +63,7 @@ abstract class BaseWorkerThread(
      * from the executed body. Also, this API catch any kind of [Exception]
      * during the execution time.
      *
-     * Notify regarding the [Exception] through [errorCallback].
+     * Notify regarding the [Exception] through #builder.errorCallback.
      *
      * @param body Body that will be executed and return nullable object [T] from the body.
      */
@@ -79,7 +71,7 @@ abstract class BaseWorkerThread(
         return try {
             body.invoke()
         } catch (e: Exception) {
-            errorCallback.invoke(e)
+            builder.errorCallback.invoke(e)
             null
         }
     }
